@@ -65,7 +65,7 @@ ops_o+=(V)  ops_l+=(version)
             ops_l+=(show-all-btrfs)
 # Should be processed later
 ops_o+=(E)  ops_l+=(no-omit)
-ops_o+=(k)  ops_l+=(keep)
+ops_o+=(k:)  ops_l+=(keep:)
 ops_o+=(q)  ops_l+=(quiet)
 ops_o+=(r)  ops_l+=(readonly)
 ops_o+=(s:) ops_l+=(store-dir:)
