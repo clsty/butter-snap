@@ -1,0 +1,235 @@
+#!/bin/bash
+
+# Butter Snap - make periodic snapshots of btrfs filesystem
+#
+# Copyright (C) 2024 Celestial.y celestial.y@outlook.com
+#
+# This program is distributed under the GNU General Public License
+# http://www.gnu.org/licenses/gpl.txt
+
+set -u
+
+LOG_FACILITY=local0
+VERSION="0.1.0"
+prog=${0##*/}
+PATH="$PATH:/usr/sbin:/usr/bin:/sbin:/bin"
+
+function join_by { local IFS="$1"; shift; echo "$*"; }
+
+function log.info() {
+    logger -p ${LOG_FACILITY}.info -t ${prog} "$1"
+    if test -z "$quiet"
+    then
+        echo "$1"
+    fi
+}
+
+function log.error() {
+    logger -p ${LOG_FACILITY}.err -t ${prog} "$1"
+    echo "ERROR: $1" >&2
+}
+
+function show_help() {
+echo \
+"Syntax: ${prog} <target> [options]
+${prog} -V for version.
+See https://github.com/clsty/buttersnap for details."
+}
+
+function show_version() {
+echo "${prog} Version ${VERSION}"
+}
+
+function show_all_btrfs() {
+declare -a mountpoints=()
+declare -a targets=()
+for i in $(cat /proc/mounts | grep '[[:space:]]btrfs[[:space:]]' | tr -s ' ' | cut -f 2 -d ' '); do
+  local id=$(btrfs subvolume show $i | grep '^[[:blank:]]*Subvolume ID:' | awk '{ print $3 }')
+  local targets+=("$i")
+  for j in $(btrfs subvolume list $i | grep " top level $id " | awk '{ print $9 }');do
+    local targets+=("$i$j")
+  done
+done
+for i in "${targets[@]}"; do echo "$i";done
+}
+
+store_path=""
+readonly=false
+quiet=""
+use_transid=false
+omit_error_code=0
+time_duration=0
+snapname_ops=""
+
+# Should be processed first
+ops_o+=(h)  ops_l+=(help)
+ops_o+=(V)  ops_l+=(version)
+            ops_l+=(show-all-btrfs)
+# Should be processed later
+ops_o+=(E)  ops_l+=(no-omit)
+ops_o+=(k)  ops_l+=(keep)
+ops_o+=(q)  ops_l+=(quiet)
+ops_o+=(r)  ops_l+=(readonly)
+ops_o+=(s:) ops_l+=(store-dir:)
+ops_o+=(S:) ops_l+=(store-pathtype:)
+ops_o+=(t:) ops_l+=(time:)
+ops_o+=(T)  ops_l+=(use-transid)
+# About snapname
+ops_o+=(n:) ops_l+=(snapname-adj:)
+ops_o+=(N:) ops_l+=(snapname-type:)
+ops_o+=(o:) ops_l+=(snapname-ops:)
+            ops_l+=(snapname-value:)
+            ops_l+=(snapname-pattern:)
+
+para=$(getopt -o $(join_by , "${ops_o[@]}") \
+              -l $(join_by , "${ops_l[@]}") \
+              -n "$0" -- "$@")
+[ $? != 0 ] && { log.error "Failed processing getopt, please recheck parameters."; exit 1; }
+
+eval set -- "$para"
+while true;do case "$1" in
+  -h|--help)             show_help ;exit 0;;
+  -V|--version)          show_version ;exit 0;;
+     --show-all-btrfs)   show_all_btrfs ;exit 0;;
+
+  -E|--no-omit)          omit_error_code=1 ;shift;;
+  -k|--keep)             keep_num="$2" ;shift 2;;
+  -q|--quiet)            quiet="1" ;shift;;
+  -r|--readonly)         readonly="true" ;shift;;
+  -s|--store-dir)        store_dir=$2 ;shift 2;;
+  -S|--store-pathtype)   store_pathtype=$2 ;shift 2;;
+  -t|--time)             time_duration=$((0+$2)) ;shift 2;;
+  -T|--use-transid)      use_transid=true ;shift ;;
+
+  -n|--snapname-adj)     snapname_adj="$2" ;shift 2;;
+  -N|--snapname-type)    snapname_type="$2" ;shift 2;;
+  -o|--snapname-ops)     snapname_ops="$2" ;shift 2;;
+     --snapname-value)   customed_snapname="$2" ;shift 2;;
+     --snapname-pattern) customed_snapname_pattern="$2" ;shift 2;;
+  --) shift;break;;
+  *) log.error "Unknown argument: $1";show_help ;exit 1;;
+esac;done
+
+# Canonicalize the mountpoint path (strip trailing slashes, etc)
+target=$(realpath -m $1)
+# Verify that the path is either a valid btrfs mountpoint
+if findmnt -t btrfs -T "${target}" &> /dev/null; then
+  log.info "Target is the mountpoint of a Btrfs (sub)volume: ${target}"
+# or a valid snapshot matching target
+elif btrfs subvolume show $target > /dev/null; then
+  log.info "Target is the path of a Btrfs (sub)volume: ${target}"
+else
+  log.error "Target must be the path or mountpoint of a Btrfs (sub)volume: ${target}"; exit 1
+fi
+
+if [ ! "${keep_num:=5}" -ge 0 ] ; then log.error "Keep number \"$keep_num\" is not a number or is less than 0.";exit 1; fi
+keep_num=$(( $keep_num+1 ))
+
+store_pathtype=${store_pathtype:-rel}
+store_dir=${store_dir:-.snapshots}
+case ${store_pathtype} in
+    rel) store_path="${target}"/"${store_dir}";;
+    mim) store_path="${store_dir}"/"${target}";;
+    abs) store_path="${store_dir}";;
+    *) log.error "False value \"${store_pathtype}\" for store_pathtype. Possible value: rel, mim, abs.";exit 1;;
+esac
+
+if [ ! -d $store_path ]; then
+    log.info "Creating $store_path"
+    mkdir -p $store_path
+fi
+store_path=$(readlink -f $store_path)
+
+time_delim=":"
+adj_as_prefix=true
+for opt in $(echo "$snapname_ops" | tr "," "\n");do case $opt in
+  compatible) time_delim="-";;
+     postfix) adj_as_prefix=false;;
+     *) log.error "Not supported snapname option: \"$opt\"";exit 1 ;;
+esac;done
+
+snapname_adj="${snapname_adj:-snapshot}"
+case ${snapname_type:=default} in
+  default)
+    if ${adj_as_prefix}; then
+      snapname=${snapname_adj}_$(date +%Y-%m-%d_%H${time_delim}%M${time_delim}%S)
+      snapname_pattern="${snapname_adj}_????-??-??_??${time_delim}??${time_delim}??"
+    else
+      snapname=$(date +%Y-%m-%d_%H${time_delim}%M${time_delim}%S)_${snapname_adj}
+      snapname_pattern="????-??-??_??${time_delim}??${time_delim}??_${snapname_adj}"
+    fi;; 
+  vfs)
+    snapname=$(TZ=GMT date +@GMT-%Y.%m.%d-%H.%M.%S)
+    snapname_pattern="@GMT-????.??.??-??.??.??"
+    ;;
+  custom)
+    snapname="$customed_snapname"
+    snapname_pattern="$customed_snapname_pattern"
+    ;;
+  *) log.error "Not supported snapname type: \"${snapname_type}\"";exit 1 ;;
+esac
+
+if [ -z "${snapname}" ]; then
+  log.error "Empty snapname.";exit 1
+elif [ -z "${snapname_pattern}" ]; then
+  log.error "Empty snapname pattern.";exit 1
+elif [ -e "${store_path}/${snapname}" ]; then
+  log.error "Snapshot could not be created at \"${store_path}/${snapname}\" because it already exists.";exit 1
+fi
+
+checktime_eq_transid(){
+  # get transaction ids
+  id_snap=$(btrfs subvolume find-new "$newestSnapshot" 99999999| sed 's/[^0-9]//g')
+  id_mount=$(btrfs subvolume find-new "${target}" 99999999| sed 's/[^0-9]//g')
+  if [ $id_mount -le $id_snap ]; then
+      log.info "No snapshot created since no changes since last snapshot. (Transaction id of $newestSnapshot is newer or equal to $target.)"
+      exit $omit_error_code
+  fi
+}
+
+checktime_eq_normal(){
+  if [ $snap_time_epoch == $target_time_epoch ]; then
+      log.info "No snapshot created since timestamp of newest snapshot $newestSnapshot equal $target."
+      exit $omit_error_code
+  fi
+}
+
+checktime_duration(){
+  if [ $(($snap_time_epoch + $time_duration)) -gt $cur_time_epoch ]; then
+      log.info "Snapshot \"${store_path}/${snapname}\" not created as the latest snapshot \"$newestSnapshot\" is not older than \"$time_duration\" seconds."
+      exit $omit_error_code
+  fi
+}
+
+if [ $time_duration -gt 0 ]; then
+    newestSnapshot=`ls -dr ${store_path}/${snapname_pattern} 2>/dev/null| head -n 1`
+    if [ ! -z "$newestSnapshot" -a -e "$newestSnapshot" ]; then
+        snap_time_epoch=`stat -c "%Y" "${newestSnapshot}"`
+        target_time_epoch=`stat -c "%Y" "${target}"`
+        cur_time_epoch=`date +%s`
+        if $use_transid
+          then checktime_eq_transid
+          else checktime_eq_normal
+        fi
+        checktime_duration
+    fi
+    # Force update of source timestamp to prevent outdated timestamps on the folders
+    touch "${target}"
+fi
+
+out=`btrfs subvol snapshot ${readonly} ${target} ${store_path}/${snapname} 2>&1`
+if [ $? -eq 0 ] ; then
+    log.info "${out}"
+else
+    log.error "${out}";exit 1
+fi
+
+ls -dr ${store_path}/${snapname_pattern} | tail -n +${keep_num} \
+  | while read snap ; do
+    out=`btrfs subvolume delete ${snap} 2>&1`
+    if [ $? -eq 0 ] ; then
+        log.info "${out}"
+    else
+        log.error "${out}";exit 1
+    fi
+done
