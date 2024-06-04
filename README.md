@@ -17,7 +17,8 @@ Features:
   - btrfs-progs, which provides `btrfs` command.
 
 ## Install
-Copy `buttersnap` to `/usr/local/bin/` (or elsewhere included in `$PATH`) and ensure it has executing permission.
+- AUR: `yay -S --needed --noconfirm butter-snap-git`
+- Manually: Clone the repo, copy `buttersnap` to `/usr/local/bin/` (or elsewhere included in `$PATH`) and ensure it has executing permission.
 
 ## Basic usage
 Syntax:
