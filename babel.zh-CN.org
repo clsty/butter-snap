@@ -149,7 +149,7 @@ esac;done
 - 检查它是否为 Btrfs 子卷的挂载点或 Btrfs 子卷本身。
 #+begin_src bash :tangle buttersnap
 # Canonicalize the mountpoint path (strip trailing slashes, etc)
-target=$(realpath -m $1)
+[[ -z "$1" ]] && {show_help; exit; } || target=$(realpath -m $1)
 # Verify that the path is either a valid btrfs mountpoint
 if findmnt -t btrfs -T "${target}" &> /dev/null; then
   log.info "Target is the mountpoint of a Btrfs (sub)volume: ${target}"
