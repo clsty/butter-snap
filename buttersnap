@@ -215,7 +215,11 @@ if [ $time_duration -gt 0 ]; then
     touch "${target}"
 fi
 
-out=`btrfs subvol snapshot ${readonly} ${target} ${store_path}/${snapname} 2>&1`
+if $readonly ; then
+  out=`btrfs subvol snapshot -r ${target} ${store_path}/${snapname} 2>&1`
+else
+  out=`btrfs subvol snapshot ${target} ${store_path}/${snapname} 2>&1`
+fi
 if [ $? -eq 0 ] ; then
     log.info "${out}"
 else
