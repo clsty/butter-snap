@@ -16,11 +16,11 @@ shebang 与元信息。
 
 #+end_src
 
-设置 shell 属性。
+设置 shell 属性；不过，都不太合适。
 - =-u= ：若调用了一个不存在的变量，则报错。
 - =-e= ：遇错则退出。
-#+begin_src bash :tangle buttersnap
-set -u
+#+begin_src bash :tangle no
+set -ue
 #+end_src
 
 一些变量配置。其中 =prog= 的值是脚本文件名；PATH 的值则是在原有基础上附加了一些变量。
@@ -149,7 +149,7 @@ esac;done
 - 检查它是否为 Btrfs 子卷的挂载点或 Btrfs 子卷本身。
 #+begin_src bash :tangle buttersnap
 # Canonicalize the mountpoint path (strip trailing slashes, etc)
-[[ -z "$1" ]] && {show_help; exit; } || target=$(realpath -m $1)
+[[ -z "$1" ]] && { show_help; exit; } || target=$(realpath -m $1)
 # Verify that the path is either a valid btrfs mountpoint
 if findmnt -t btrfs -T "${target}" &> /dev/null; then
   log.info "Target is the mountpoint of a Btrfs (sub)volume: ${target}"
