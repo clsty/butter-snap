@@ -52,7 +52,7 @@ function show_help() {
 echo \
 "Syntax: ${prog} <target> [options]
 ${prog} -V for version.
-See https://github.com/clsty/buttersnap for details."
+See https://github.com/clsty/butter-snap for details."
 }
 
 function show_version() {
