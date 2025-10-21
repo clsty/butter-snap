@@ -28,10 +28,25 @@ function log.error() {
 }
 
 function show_help() {
-echo \
-"Syntax: ${prog} <target> [options]
-${prog} -V for version.
-See https://github.com/clsty/butter-snap for details."
+  # Prefer to show the formatted man page if available, otherwise
+  # fallback to displaying the raw manpage file.
+  MANPAGE_PATH="$(dirname "$0")/share/man/man1/${prog}.1"
+  if command -v man >/dev/null 2>&1; then
+    man ${prog} 2>/dev/null || {
+      if [ -f "${MANPAGE_PATH}" ]; then
+        cat "${MANPAGE_PATH}"
+      else
+        echo "${prog}: manual entry not found. See https://github.com/clsty/butter-snap for details."
+      fi
+    }
+  else
+    if [ -f "${MANPAGE_PATH}" ]; then
+      cat "${MANPAGE_PATH}"
+    else
+      echo "Syntax: ${prog} <target> [options]"
+      echo "${prog} -V for version. See https://github.com/clsty/butter-snap for details."
+    fi
+  fi
 }
 
 function show_version() {

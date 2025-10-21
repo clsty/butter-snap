@@ -19,6 +19,44 @@ Features:
 ## Install
 - AUR: `yay -S --needed --noconfirm butter-snap-git`
 - Manually: Clone the repo, copy `buttersnap` to `/usr/local/bin/` (or elsewhere included in `$PATH`) and ensure it has executing permission.
+ 
+Makefile-based install
+:
+
+This repository contains a simple `Makefile` that follows the common GNU conventions. By default it installs to `/usr/local` so local/manual installs won't conflict with distribution packages.
+
+- To install locally (default PREFIX=/usr/local):
+
+```bash
+make install
+```
+
+- To install into a staging directory (useful for packaging or testing):
+
+```bash
+make install DESTDIR=$(pwd)/staging
+# resulting files will appear under staging/usr/local/bin and staging/usr/local/share/man/man1
+```
+
+- To install for a distribution package (e.g. into `/usr`), the packager typically overrides `PREFIX` and/or uses `DESTDIR`:
+
+```bash
+make install PREFIX=/usr DESTDIR=$pkgdir
+```
+
+PKGBUILD example (Arch AUR packaging)
+:
+
+An example snippet for an Arch `PKGBUILD` showing how a packager would install files into the package directory:
+
+```bash
+package() {
+  cd "$srcdir/$pkgname"
+  make install PREFIX=/usr DESTDIR="$pkgdir"
+}
+```
+
+The important part is supporting `PREFIX` and `DESTDIR` in the Makefile. `PREFIX` controls the final installation root (e.g. `/usr` vs `/usr/local`) and `DESTDIR` is used by packagers to stage files into a package directory — this is the standard and expected behavior for packaging systems.
 
 ## Basic usage
 Syntax:

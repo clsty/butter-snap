@@ -1,0 +1,128 @@
+.TH BUTTERSNAP 1 "2025-10-21" "buttersnap 0.1.0" "User Commands"
+.SH NAME
+buttersnap \- create and maintain snapshots of Btrfs (sub)volumes
+.SH SYNOPSIS
+.B buttersnap
+\fI<target>\fR [options]
+.SH DESCRIPTION
+buttersnap is a small Bash utility to create and maintain a history of snapshots for Btrfs (sub)volumes.
+
+It is designed to be called from cron or other schedulers to keep periodic snapshots. Snapshots are created as btrfs subvolume snapshots and older snapshots matching the configured pattern may be purged automatically.
+
+The tool supports storing snapshots inside or outside the target, multiple naming schemes, time-based creation, read-only snapshots, and an auto-clean policy for old snapshots.
+
+.SH OPTIONS
+.TP
+.B -h, --help
+Display this manual page. If the system has the \fBman\fR command it will be used. Otherwise the raw manpage file bundled with the script will be shown.
+.TP
+.B -V, --version
+Print the program version and exit.
+.TP
+.B -s, --store-dir \fI<store directory>\fR
+Directory name for storing snapshots (default: .snapshots).
+.TP
+.B -S, --store-pathtype \fI<store pathtype>\fR
+How to form the store path (default: rel):
+.RS
+.TP
+.B rel
+store path = \fItarget\fR/\fIstore directory\fR
+.TP
+.B mim
+store path = \fIstore directory\fR/\fItarget\fR
+.TP
+.B abs
+store path = \fIstore directory\fR (absolute). When using \fBabs\fR, choose snapname carefully to avoid name conflicts.
+.RE
+.TP
+.B -n, --snapname-adj \fI<snapname adj>\fR
+Snapshot name adjustment string used in the generated snapshot name. By default \fBsnapshot\fR. Common values: \fBhourly\fR, \fBdaily\fR, \fBweekly\fR, or interval-like names such as \fB5m\fR, \fB1d\fR.
+.TP
+.B -N, --snapname-type \fI<snapname type>\fR
+Snapname type (default: \fBdefault\fR):
+.RS
+.TP
+.B default
+Name: \fB<snapname adj>_YYYY-MM-DD_HH:MM:SS\fR (colons present). Applicable snapname options: \fBcompatible\fR, \fBpostfix\fR.
+.TP
+.B vfs
+Use Samba vfs_shadow_copy naming: \fB@GMT-YYYY.MM.DD-HH.MM.SS\fR.
+.TP
+.B custom
+Custom snapname. Use \fB--snapname-value\fR and \fB--snapname-pattern\fR to provide the name and the matching pattern.
+.RE
+.TP
+.B --snapname-value \fI<snapname>\fR
+Specify a custom snapshot name when \fBN\fR is \fBcustom\fR.
+.TP
+.B --snapname-pattern \fI<pattern>\fR
+Specify the matching pattern for custom snapname detection. Used to select snapshots for cleanup.
+.TP
+.B -o, --snapname-ops \fI<ops>\fR
+Comma-separated additional options for snapname behaviour. Options:
+.RS
+.TP
+.B compatible
+Use names without colons (useful to be Windows/Samba compatible).
+.TP
+.B postfix
+Place \fIsnapname adj\fR as postfix instead of prefix.
+.RE
+.TP
+.B -t, --time \fI<seconds>\fR
+Create a snapshot only if the newest existing snapshot is older than the given time in seconds. If a newest snapshot is present and its timestamp equals the target's timestamp (and \fB-T\fR is not used), no new snapshot will be created.
+.TP
+.B -T, --use-transid
+When used with \fB-t\fR, compare transaction id (transid) instead of timestamps: skip snapshot when the target's transid is less than or equal to the newest snapshot's transid.
+.TP
+.B -r, --readonly
+Create the snapshot as readonly (requires sufficiently recent btrfs-progs).
+.TP
+.B -E, --no-omit
+Treat omission of snapshot creation (e.g. due to -t/-T) as an error (non-zero exit code).
+.TP
+.B -k, --keep \fI<number>\fR
+Keep the newest \fInumber\fR snapshots matching the snapname pattern; older ones will be deleted. Default is 5.
+.TP
+.B -q, --quiet
+Suppress non-error output; suitable for cron jobs.
+.TP
+.B --show-all-btrfs
+Print currently mounted Btrfs mountpoints and unmounted Btrfs subvolumes discovered on the system.
+.SH TARGET
+\fI<target>\fR is the path or mountpoint of a Btrfs (sub)volume. Internally it is canonicalized with \fIrealpath -m\fR.
+.SH STORE PATH
+The effective store path is computed based on \fI--store-dir\fR and \fI--store-pathtype\fR as described above.
+.SH SNAPNAME DETAILS
+See \fB-N\fR, \fB-n\fR, \fB-o\fR and related options for how snapshot names are formed and matched. Typical default name is \fBsnapshot_YYYY-MM-DD_HH:MM:SS\fR.
+.SH EXAMPLES
+.TP
+.B Basic
+.nf
+buttersnap / -n"hourly"
+.fi
+Creates snapshots of / in /.snapshots with names like hourly_YYYY-MM-DD_HH:MM:SS and keeps 5 newest by default.
+.TP
+.B Cron (two schedules)
+.nf
+*/5   *   *   *   *   buttersnap /     -n5m -k12 -r
+0     0   *   *   *   buttersnap /home -n1d -k7  -r -S"mim" -s"/snapshots"
+.fi
+.TP
+.B Polling example
+.nf
+buttersnap -r -S"abs" -s <store path> -t3600           /data -n"data_hourly" -k24
+buttersnap -r -S"abs" -s <store path> -t$((3600*24))   /data -n"data_daily"  -k7
+buttersnap -r -S"abs" -s <store path> -t$((3600*24*7)) /data -n"data_weekly" -k4
+.fi
+.SH REQUIREMENTS
+This script requires Bash and the \fBbtrfs\fR command provided by the btrfs-progs package.
+.SH INSTALLATION
+Manually copy the \fIbuttersnap\fR script to a directory in your \fIPATH\fR such as /usr/local/bin and ensure it is executable. To make the man page available via the system \fBman\fR, install the file to the appropriate man directory (e.g. /usr/share/man/man1/buttersnap.1) and update the man database.
+.SH AUTHOR
+Developed by clsty <https://github.com/clsty> (email: celestial.y@outlook.com)
+.SH LICENSE
+This program is distributed under the GNU General Public License. See http://www.gnu.org/licenses/gpl.txt
+.SH HISTORY
+Derived from btrfs-snap (various authors). See README for upstream history and credits.
