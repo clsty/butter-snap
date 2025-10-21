@@ -27,16 +27,23 @@ Syntax:
 buttersnap <target> [options]
 ```
 The command above creates a snapshot of `<target>` as `<store path>/<snapname>`.
-- `<target>`: The path or mountpoint of a Btrfs (sub)volume.
-  - Internally it will be read as `target=$(realpath -m <target>)`.
 
 > Example: `buttersnap / -n"hourly"` will make a snapshot in `/.snapshots` with a name `hourly_<date>_<time>`.
 > - `<date>` is on the form `YYYY-MM-DD`,
 > - `<time>` is on the form `HH:MM:SS`,
 > - The 5 newest snapshots matching the prefix `hourly_` are kept around; the rest are deleted.
+>
+> The options are detailed in following sections.
 
+### target
+`<target>`: The path or mountpoint of a Btrfs (sub)volume.
+- Internally it will be read as `target=$(realpath -m <target>)`.
 
-**Options for `<store path>`:**
+### store path
+`<store path>`: The path where snapshots are stored.
+- Determined by `<store directory>` and `<store pathtype>`.
+
+**Related options:**
 - `-s`, `--store-dir <store directory>`: Specify the value for `<store directory>` (by default `.snapshots`).
 - `-S`, `--store-pathtype <store pathtype>`: Specify the value for `<store pathtype>` (by default `rel`).
   - `rel` (relative): Let `<store path>` to be `<target (in realpath)>/<store directory>`.
@@ -44,7 +51,11 @@ The command above creates a snapshot of `<target>` as `<store path>/<snapname>`.
   - `abs` (absolute): Let `<store path>` to be `<store directory>`.
     - In this case, choose `<snapname adj>` wisely to avoid name conflicts.
 
-**Options for `<snapname>`:**
+### snapname
+`<snapname>`: The name of snapshots.
+- Determined by `<snapname adj>`, `<snapname type>`, `<snapname pattern>` and `<snapname options>`.
+
+**Related options:**
 - `-n`, `--snapname-adj <snapname adj>`: To be used in the name of the snapshot, by default as prefix. The default value is `snapshot`.
   - It's recommended to set this value corresponding to the schedule, such as `hourly`, `daily`, `weekly` or `1m`, `3h`, `1d`, `1w`, `3mo`.
 - `-N`,`--snapname-type <snapname type>`: Select a set of snapname and matching pattern. By default `default`.
@@ -60,18 +71,18 @@ The command above creates a snapshot of `<target>` as `<store path>/<snapname>`.
   - `compatible`: Compatible snapshot names (i.e. no colons that confuse SAMBA/Windows clients).
   - `postfix`: Use `<snapname adj>` as postfix instead of prefix. Might be usefull for chronological sorting.
 
-**Options for creating behavior:**
+### Options for creating behavior
 - `-t`, `--time <time>`: A snapshot will be created **only** if the newest already existing snapshot is older than `<time>` in seconds.
   - Unless `-T` is specified, no snapshot will be made if `<target>` has identical timestamp as the newest snapshot. The modification timestamps of the subvolumes/folders are used for comparison which **might not** work in some scenarios.
 - `-T`, `--use-transid`: When `-t` is specified, no snapshot will be made if `<target>` has a lower or equal transition-id than newest snapshot.
 - `-r`, `--readonly`: Create the snapshot as readonly (requires btrfs-tools > v0.20).
 - `-E`, `--no-omit`: Treats omitting of snapshots (e.g. due to options `-t`/`-T`) as an error.
 
-**Options for auto-clean behavior:**
+### Options for auto-clean behavior
 - `-k`, `--keep <number>`: Sort the snapshots matching `<snapname pattern>` by using `ls -dr` and keep the first `<number>` snapshots; the rest ones will be deleted.
   - 5 snapshots will be kept if this option is not specified.
 
-**Other options:**
+### Other options
 - `-q`, `--quiet`: Silent unless an error occurs. Such output is cron-compatible.
 - `-h`, `--help`: Print help message and exit.
 - `-V`, `--version`: Print version message and exit.
