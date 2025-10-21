@@ -28,12 +28,12 @@ buttersnap <target> [options]
 ```
 The command above creates a snapshot of `<target>` as `<store path>/<snapname>`.
 
-> Example: `buttersnap / -n"hourly"` will make a snapshot in `/.snapshots` with a name `hourly_<date>_<time>`.
+> Example: `buttersnap / -n"hourly"` will make a snapshot of `/` in `/.snapshots` with a name `hourly_<date>_<time>`.
 > - `<date>` is on the form `YYYY-MM-DD`,
 > - `<time>` is on the form `HH:MM:SS`,
 > - The 5 newest snapshots matching the prefix `hourly_` are kept around; the rest are deleted.
->
-> The options are detailed in following sections.
+
+The arguments are detailed in the following sections.
 
 ### target
 `<target>`: The path or mountpoint of a Btrfs (sub)volume.
